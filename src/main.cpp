@@ -120,16 +120,9 @@ void loop()
     if (millis() - lastStatus > 10000)
     {                                       // Start send status every 10 sec (just as an example)
                                             // Serial.println(Status);
-      float humd = sht20.readHumidity();    // Read Humidity
+      float hum = sht20.readHumidity();    // Read Humidity
       float temp = sht20.readTemperature(); // Read Temperature
-      Serial.print(" Temperature: ");
-      Serial.print(temp, 1);
-      Serial.print("C\t");
-      Serial.print(" Humidity: ");
-      Serial.print(humd, 1);
-      Serial.print("%");
-      Serial.println();
-      String json = "{\"temp_in\":\"" + String(temp) + "\"}";
+      String json = "{\"temperature\":\"" + String(temp) + "\" , \"humidity\":\"" + String(hum) + "\"}";
       char *payload = &json[0]; // converts String to char*
       mqttClient.publish(input_topic, payload);
       // mqttClient.publish(input_topic, Status); //      send status to broker
