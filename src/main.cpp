@@ -1,6 +1,38 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include "DFRobot_SHT20.h"
+#include <WiFi.h>
+#include <MQTTClient.h> // MQTT Client from Joël Gaehwiler https://github.com/256dpi/arduino-mqtt   keepalive manually to 15s
+
+const char *WiFi_SSID = "YourWiFiSSID";
+const char *WiFi_PW = "YourWiFiPassword";
+const char *mqtt_broker = "YourMQTTBrokerIP";
+const char *mqtt_user = "YourMQTTBrokerUsername";
+const char *mqtt_pw = "YourMQTTBrokerPassword";
+const char *input_topic = "YourTopic";
+String clientId = "ESP32Client-";                 // Necessary for user-pass auth
+const int stationID = 1;                          // check stations table in database
+
+unsigned long waitCount = 0; // counter
+uint8_t conn_stat = 0;       // Connection status for WiFi and MQTT:
+                             //
+                             // status |   WiFi   |    MQTT
+                             // -------+----------+------------
+                             //      0 |   down   |    down
+                             //      1 | starting |    down
+                             //      2 |    up    |    down
+                             //      3 |    up    |  starting
+                             //      4 |    up    | finalising
+                             //      5 |    up    |     up
+
+unsigned long lastStatus = 0; // counter in example code for conn_stat == 5
+unsigned long lastTask = 0;   // counter in example code for conn_stat <> 5
+
+const char *Version = "{\"Version\":\"low_prio_wifi_v2\"}";
+const char *Status = "{\"Message\":\"up and running\"}";
+
+WiFiClient espClient;       // TCP client object, uses SSL/TLS
+MQTTClient mqttClient(512); // MQTT client object with a buffer size of 512 (depends on your message size)
 
 DFRobot_SHT20 sht20;
 
@@ -26,46 +58,14 @@ void printPins()
   Serial.println();
 }
 
-#include <WiFi.h>       // needed for the WiFi communication
-#include <MQTTClient.h> // MQTT Client from Joël Gaehwiler https://github.com/256dpi/arduino-mqtt   keepalive manually to 15s
-
-String WiFi_SSID = "YourWiFiSSID";           // change according your setup : SSID and password for the WiFi network
-String WiFi_PW = "YourWiFiPassword";         //    "
-String mqtt_broker = "YourMQTTBrokerIP";     // change according your setup : IP Adress or FQDN of your MQTT broker
-String mqtt_user = "YourMQTTBrokerUsername"; // change according your setup : username and password for authenticated broker access
-String mqtt_pw = "YourMQTTBrokerPassword";   //    "
-String input_topic = "YourTopic";            // change according your setup : MQTT topic for messages from device to broker
-
-unsigned long waitCount = 0; // counter
-uint8_t conn_stat = 0;       // Connection status for WiFi and MQTT:
-                             //
-                             // status |   WiFi   |    MQTT
-                             // -------+----------+------------
-                             //      0 |   down   |    down
-                             //      1 | starting |    down
-                             //      2 |    up    |    down
-                             //      3 |    up    |  starting
-                             //      4 |    up    | finalising
-                             //      5 |    up    |     up
-
-unsigned long lastStatus = 0; // counter in example code for conn_stat == 5
-unsigned long lastTask = 0;   // counter in example code for conn_stat <> 5
-
-const char *Version = "{\"Version\":\"low_prio_wifi_v2\"}";
-const char *Status = "{\"Message\":\"up and running\"}";
-
-WiFiClient espClient;       // TCP client object, uses SSL/TLS
-MQTTClient mqttClient(512); // MQTT client object with a buffer size of 512 (depends on your message size)
-
 void setup()
 {
   Serial.begin(115200);
   WiFi.mode(WIFI_STA); // config WiFi as client
-  Serial.begin(115200);
   // printPins();
-  sht20.initSHT20(); // Init SHT20 Sensor
+  sht20.initSHT20();
   delay(100);
-  sht20.checkSHT20(); // Check SHT20 Sensor
+  sht20.checkSHT20();
 }
 
 void loop()
@@ -87,7 +87,7 @@ void loop()
   {
   case 0: // MQTT and WiFi down: start WiFi
     Serial.println("MQTT and WiFi down: start WiFi");
-    WiFi.begin(WiFi_SSID.c_str(), WiFi_PW.c_str());
+    WiFi.begin(WiFi_SSID, WiFi_PW);
     conn_stat = 1;
     break;
   case 1: // WiFi starting, do nothing here
@@ -96,19 +96,20 @@ void loop()
     break;
   case 2: // WiFi up, MQTT down: start MQTT
     Serial.println("WiFi up, MQTT down: start MQTT");
-    mqttClient.begin(mqtt_broker.c_str(), 1883, espClient); //   config MQTT Server, use port 8883 for secure connection
-    mqttClient.connect(mqtt_user.c_str(), mqtt_pw.c_str());
+    mqttClient.begin(mqtt_broker, 1883, espClient); //   config MQTT Server, use port 8883 for secure connection
+    clientId += String(random(0xffff), HEX);        // Create a random
+    mqttClient.connect(clientId.c_str(), mqtt_user, mqtt_pw);
     conn_stat = 3;
     waitCount = 0;
     break;
   case 3: // WiFi up, MQTT starting, do nothing here
     Serial.println("WiFi up, MQTT starting, wait : " + String(waitCount));
+    mqttClient.connect(clientId.c_str(), mqtt_user, mqtt_pw);
     waitCount++;
     break;
   case 4: // WiFi up, MQTT up: finish MQTT configuration
     Serial.println("WiFi up, MQTT up: finish MQTT configuration");
-    //mqttClient.subscribe(output_topic);
-    mqttClient.publish(input_topic, Version);
+    mqttClient.publish(input_topic, Version); // this is necessary if broker is down
     conn_stat = 5;
     break;
   }
@@ -118,14 +119,12 @@ void loop()
   if (conn_stat == 5)
   {
     if (millis() - lastStatus > 10000)
-    {                                       // Start send status every 10 sec (just as an example)
-                                            // Serial.println(Status);
-      float hum = sht20.readHumidity();    // Read Humidity
-      float temp = sht20.readTemperature(); // Read Temperature
-      String json = "{\"temperature\":\"" + String(temp) + "\" , \"humidity\":\"" + String(hum) + "\"}";
+    {
+      float hum = sht20.readHumidity();
+      float temp = sht20.readTemperature();
+      String json = "{\"temperature\":\"" + String(temp) + "\" , \"humidity\":\"" + String(hum) + "\", \"stationID\":\"" + stationID + "\" }";
       char *payload = &json[0]; // converts String to char*
       mqttClient.publish(input_topic, payload);
-      // mqttClient.publish(input_topic, Status); //      send status to broker
       mqttClient.loop();     //      give control to MQTT to send message to broker
       lastStatus = millis(); //      remember time of last sent status message
     }
