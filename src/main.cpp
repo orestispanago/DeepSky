@@ -67,7 +67,7 @@ void setup()
 {
   Serial.begin(115200);
   WiFi.mode(WIFI_STA); // config WiFi as client
-  printPins();
+  // printPins();
   sht20.initSHT20();
   delay(100);
   sht20.checkSHT20();
@@ -130,22 +130,22 @@ void loop()
     {
       humidity.update(sht20.readHumidity());
       temperature.update(sht20.readTemperature());
-      Serial.println(temperature.toString());
+      // Serial.println(temperature.toString());
       lastReadMillis = millis();
-      // delay(readInterval);
     }
     if (millis() - lastUploadMillis > uploadInterval)
     {
       String json = "{\"temperature\":\"" + String(temperature.getAverage()) +
                     "\" , \"humidity\":\"" + String(humidity.getAverage()) +
                     "\", \"stationID\":\"" + stationID + "\" }";
+      temperature.reset();
+      humidity.reset();
+
       char *payload = &json[0]; // converts String to char*
       mqttClient.publish(input_topic, payload);
       mqttClient.loop(); //      give control to MQTT to send message to broker
 
       lastUploadMillis = millis();
-      temperature.reset();
-      humidity.reset();
     }
     mqttClient.loop();
   }
