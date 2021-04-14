@@ -41,18 +41,6 @@ uint8_t conn_stat;
 WiFiClient espClient;       // TCP client object, uses SSL/TLS
 MQTTClient mqttClient(512); // MQTT client object with a buffer size of 512 (depends on your message size)
 
-void setup()
-{
-  Serial.begin(115200);
-  WiFi.mode(WIFI_STA); // config WiFi as client
-  // printPins();
-  sht20.initSHT20();
-  delay(100);
-  sht20.checkSHT20();
-  temperature = Measurement();
-  humidity = Measurement();
-}
-
 void printPins()
 {
   Serial.println();
@@ -73,6 +61,18 @@ void printPins()
   Serial.print("SCL: \t");
   Serial.println(SCL);
   Serial.println();
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  WiFi.mode(WIFI_STA); // config WiFi as client
+  printPins();
+  sht20.initSHT20();
+  delay(100);
+  sht20.checkSHT20();
+  temperature = Measurement();
+  humidity = Measurement();
 }
 
 boolean connected()
@@ -130,9 +130,9 @@ void loop()
     {
       humidity.update(sht20.readHumidity());
       temperature.update(sht20.readTemperature());
-      // Serial.println(temperature.toString());
+      Serial.println(temperature.toString());
       lastReadMillis = millis();
-      delay(readInterval);
+      // delay(readInterval);
     }
     if (millis() - lastUploadMillis > uploadInterval)
     {
