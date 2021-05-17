@@ -2,9 +2,12 @@
 #include <Wire.h>
 #include "DFRobot_SHT20.h"
 #include <WiFi.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
 #include <MQTTClient.h> // MQTT Client from Joël Gaehwiler https://github.com/256dpi/arduino-mqtt   keepalive manually to 15s
 #include <ArduinoJson.h>
 #include <Measurement.h>
+
 
 const char* WiFi_SSID = "YourWiFiSSID";
 const char* WiFi_PW = "YourWiFiPassword";
@@ -13,13 +16,11 @@ const char* mqtt_user = "YourMQTTBrokerUsername";
 const char* mqtt_pw = "YourMQTTBrokerPassword";
 const char* input_topic = "YourTopic";
 
-const int stationID = 3; // check stations table in database
+int stationID = 3; // check stations table in database
 unsigned long readInterval = 3000;
 unsigned long uploadInterval = 60000;
 
-unsigned long currentMillis;
-unsigned long lastReadMillis;
-unsigned long lastUploadMillis;
+unsigned long currentMillis, lastReadMillis, lastUploadMillis;
 
 DFRobot_SHT20 sht20;
 Measurement temperature, humidity;
@@ -28,24 +29,16 @@ String clientId;
 
 unsigned long waitCount;
 uint8_t conn_stat;
-// Connection status for WiFi and MQTT:
-//
-// status |   WiFi   |    MQTT
-// -------+----------+------------
-//      0 |   down   |    down
-//      1 | starting |    down
-//      2 |    up    |    down
-//      3 |    up    |  starting
-//      4 |    up    | finalising
-//      5 |    up    |     up
 
+WiFiClient espClient;
 const int16_t messageSize = 256;
-
-WiFiClient espClient;               // TCP client object, uses SSL/TLS
-MQTTClient mqttClient(messageSize); // MQTT client object with a buffer size of 512 (depends on your message size)
+MQTTClient mqttClient(messageSize);
 
 StaticJsonDocument<messageSize> jsonDoc;
 char payload[messageSize];
+
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP);
 
 void printPins()
 {
@@ -69,18 +62,18 @@ void printPins()
   Serial.println();
 }
 
-void setup()
-{
-  Serial.begin(115200);
-  WiFi.mode(WIFI_STA); // config WiFi as client
-  // printPins();
-  sht20.initSHT20();
-  delay(100);
-  sht20.checkSHT20();
-}
-
 boolean connected()
 {
+  // Connection status for WiFi and MQTT:
+  //
+  // status |   WiFi   |    MQTT
+  // -------+----------+------------
+  //      0 |   down   |    down
+  //      1 | starting |    down
+  //      2 |    up    |    down
+  //      3 |    up    |  starting
+  //      4 |    up    | finalising
+  //      5 |    up    |     up
   if ((WiFi.status() != WL_CONNECTED) && (conn_stat != 1))
   {
     conn_stat = 0;
@@ -101,7 +94,8 @@ boolean connected()
     conn_stat = 1;
     break;
   case 1: // WiFi starting, do nothing here
-    Serial.println("WiFi starting, wait : " + String(waitCount));
+    Serial.print("WiFi starting, wait : ");
+    Serial.println(waitCount);
     waitCount++;
     break;
   case 2: // WiFi up, MQTT down: start MQTT
@@ -113,7 +107,8 @@ boolean connected()
     waitCount = 0;
     break;
   case 3: // WiFi up, MQTT starting, do nothing here
-    Serial.println("WiFi up, MQTT starting, wait : " + String(waitCount));
+    Serial.print("WiFi up, MQTT starting, wait : ");
+    Serial.println(waitCount);
     mqttClient.connect(clientId.c_str(), mqtt_user, mqtt_pw);
     waitCount++;
     break;
@@ -124,6 +119,31 @@ boolean connected()
     break;
   }
   return conn_stat == 5;
+}
+
+void waitForNextMinute()
+{
+  while (!connected())
+    ;
+  timeClient.begin();
+  while (!timeClient.update())
+  {
+    timeClient.forceUpdate();
+  }
+  while (timeClient.getSeconds() != 0)
+    ;
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  WiFi.mode(WIFI_STA); // config WiFi as client
+  // printPins();
+  sht20.initSHT20();
+  delay(100);
+  sht20.checkSHT20();
+  waitForNextMinute();
+  lastUploadMillis = millis();
 }
 
 void updateJson()
