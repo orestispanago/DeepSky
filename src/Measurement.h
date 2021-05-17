@@ -7,19 +7,26 @@ class Measurement
 {
 public:
     Measurement();
-    long getCount();
-    float getCurrent();
-    float getTotal();
-    float getAverage();
-    void update(float newVal);
+    unsigned long count();
+    float current();
+    float sum();
+    float mean();
+    float min();
+    float max();
+    float stdev();
+    void sample(float newVal);
+    void print();
     void reset();
-    String toString();
 
 private:
-    long count;
-    float current;
-    float total;
-    float average;
+    unsigned long _count;
+    float _current;
+    float _sum;
+    float _mean;
+    float _min;
+    float _max;
+    float _sqDiffMean;
+    float _stdev;
 };
 
 #endif

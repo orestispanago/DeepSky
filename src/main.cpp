@@ -3,25 +3,26 @@
 #include "DFRobot_SHT20.h"
 #include <WiFi.h>
 #include <MQTTClient.h> // MQTT Client from Joël Gaehwiler https://github.com/256dpi/arduino-mqtt   keepalive manually to 15s
+#include <ArduinoJson.h>
 #include <Measurement.h>
 
-const char *WiFi_SSID = "YourWiFiSSID";
-const char *WiFi_PW = "YourWiFiPassword";
-const char *mqtt_broker = "YourMQTTBrokerIP";
-const char *mqtt_user = "YourMQTTBrokerUsername";
-const char *mqtt_pw = "YourMQTTBrokerPassword";
-const char *input_topic = "YourTopic";
+const char* WiFi_SSID = "YourWiFiSSID";
+const char* WiFi_PW = "YourWiFiPassword";
+const char* mqtt_broker = "YourMQTTBrokerIP";
+const char* mqtt_user = "YourMQTTBrokerUsername";
+const char* mqtt_pw = "YourMQTTBrokerPassword";
+const char* input_topic = "YourTopic";
 
-const int stationID = 1; // check stations table in database
-long readInterval = 3000;
+const int stationID = 3; // check stations table in database
+unsigned long readInterval = 3000;
 unsigned long uploadInterval = 60000;
 
-long lastReadMillis;
+unsigned long currentMillis;
+unsigned long lastReadMillis;
 unsigned long lastUploadMillis;
 
 DFRobot_SHT20 sht20;
-Measurement temperature;
-Measurement humidity;
+Measurement temperature, humidity;
 
 String clientId;
 
@@ -38,8 +39,13 @@ uint8_t conn_stat;
 //      4 |    up    | finalising
 //      5 |    up    |     up
 
-WiFiClient espClient;       // TCP client object, uses SSL/TLS
-MQTTClient mqttClient(512); // MQTT client object with a buffer size of 512 (depends on your message size)
+const int16_t messageSize = 256;
+
+WiFiClient espClient;               // TCP client object, uses SSL/TLS
+MQTTClient mqttClient(messageSize); // MQTT client object with a buffer size of 512 (depends on your message size)
+
+StaticJsonDocument<messageSize> jsonDoc;
+char payload[messageSize];
 
 void printPins()
 {
@@ -71,8 +77,6 @@ void setup()
   sht20.initSHT20();
   delay(100);
   sht20.checkSHT20();
-  temperature = Measurement();
-  humidity = Measurement();
 }
 
 boolean connected()
@@ -122,30 +126,42 @@ boolean connected()
   return conn_stat == 5;
 }
 
+void updateJson()
+{
+  jsonDoc["stationID"] = stationID;
+  jsonDoc["count"] = temperature.count();
+  jsonDoc["Tmin"] = temperature.min();
+  jsonDoc["Tmax"] = temperature.max();
+  jsonDoc["Tmean"] = temperature.mean();
+  jsonDoc["Tstdev"] = temperature.stdev();
+  jsonDoc["RHmin"] = humidity.min();
+  jsonDoc["RHmax"] = humidity.max();
+  jsonDoc["RHmean"] = humidity.mean();
+  jsonDoc["RHstdev"] = humidity.stdev();
+  jsonDoc["freeHeap"] = ESP.getFreeHeap();
+}
+
 void loop()
 {
   if (connected())
   {
-    if (millis() - lastReadMillis > readInterval)
+    currentMillis = millis();
+    if (currentMillis - lastReadMillis >= readInterval)
     {
-      humidity.update(sht20.readHumidity());
-      temperature.update(sht20.readTemperature());
-      // Serial.println(temperature.toString());
-      lastReadMillis = millis();
+      lastReadMillis = currentMillis;
+      temperature.sample(sht20.readTemperature());
+      humidity.sample(sht20.readHumidity());
     }
-    if (millis() - lastUploadMillis > uploadInterval)
+    currentMillis = millis();
+    if (currentMillis - lastUploadMillis >= uploadInterval)
     {
-      String json = "{\"temperature\":\"" + String(temperature.getAverage()) +
-                    "\" , \"humidity\":\"" + String(humidity.getAverage()) +
-                    "\", \"stationID\":\"" + stationID + "\" }";
+      lastUploadMillis = currentMillis;
+      updateJson();
       temperature.reset();
       humidity.reset();
-
-      char *payload = &json[0]; // converts String to char*
+      serializeJson(jsonDoc, payload);
       mqttClient.publish(input_topic, payload);
       mqttClient.loop(); //      give control to MQTT to send message to broker
-
-      lastUploadMillis = millis();
     }
     mqttClient.loop();
   }
