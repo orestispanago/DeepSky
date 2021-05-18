@@ -4,15 +4,17 @@
 #include "Arduino.h"
 #include <WiFi.h>
 #include <MQTTClient.h> // MQTT Client from Joël Gaehwiler https://github.com/256dpi/arduino-mqtt   keepalive manually to 15s
-
+#include <ArduinoJson.h>
 
 class Connection
 {
 public:
     Connection(int16_t messageSize);
     boolean statusOK();
-    void upload(char payload[]);
+    void upload();
     void check();
+    StaticJsonDocument<256> jsonDoc;
+    char payload[256];
 
 private:
     MQTTClient mqttClient;

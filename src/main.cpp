@@ -3,7 +3,6 @@
 #include "DFRobot_SHT20.h"
 #include <NTPClient.h>
 #include <WiFiUdp.h>
-#include <ArduinoJson.h>
 #include <Measurement.h>
 #include <Connection.h>
 
@@ -19,8 +18,7 @@ Measurement temperature, humidity;
 
 const int16_t messageSize = 256;
 Connection connection(messageSize);
-StaticJsonDocument<messageSize> jsonDoc;
-char payload[messageSize];
+
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);
@@ -52,17 +50,17 @@ void setup()
 
 void updateJson()
 {
-  jsonDoc["stationID"] = stationID;
-  jsonDoc["count"] = temperature.count();
-  jsonDoc["Tmin"] = temperature.min();
-  jsonDoc["Tmax"] = temperature.max();
-  jsonDoc["Tmean"] = temperature.mean();
-  jsonDoc["Tstdev"] = temperature.stdev();
-  jsonDoc["RHmin"] = humidity.min();
-  jsonDoc["RHmax"] = humidity.max();
-  jsonDoc["RHmean"] = humidity.mean();
-  jsonDoc["RHstdev"] = humidity.stdev();
-  jsonDoc["freeHeap"] = ESP.getFreeHeap();
+  connection.jsonDoc["stationID"] = stationID;
+  connection.jsonDoc["count"] = temperature.count();
+  connection.jsonDoc["Tmin"] = temperature.min();
+  connection.jsonDoc["Tmax"] = temperature.max();
+  connection.jsonDoc["Tmean"] = temperature.mean();
+  connection.jsonDoc["Tstdev"] = temperature.stdev();
+  connection.jsonDoc["RHmin"] = humidity.min();
+  connection.jsonDoc["RHmax"] = humidity.max();
+  connection.jsonDoc["RHmean"] = humidity.mean();
+  connection.jsonDoc["RHstdev"] = humidity.stdev();
+  connection.jsonDoc["freeHeap"] = ESP.getFreeHeap();
 }
 
 void loop()
@@ -83,8 +81,7 @@ void loop()
       updateJson();
       temperature.reset();
       humidity.reset();
-      serializeJson(jsonDoc, payload);
-      connection.upload(payload);
+      connection.upload();
     }
     connection.check();
   }

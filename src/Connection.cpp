@@ -9,6 +9,8 @@ Connection::Connection(int16_t messageSize)
 
     WiFiClient espClient;
     MQTTClient mqttClient(messageSize);
+    StaticJsonDocument<256> jsonDoc;
+    char payload[256];
 }
 
 // void initConnection()
@@ -75,8 +77,9 @@ boolean Connection::statusOK()
     return status == 5;
 }
 
-void Connection::upload(char payload[])
+void Connection::upload()
 {
+    serializeJson(jsonDoc, payload);
     mqttClient.publish(input_topic, payload);
     mqttClient.loop(); //      give control to MQTT to send message to broker
 }
