@@ -21,3 +21,19 @@ void printPins()
     Serial.println(SCL);
     Serial.println();
 }
+
+int intFromUserName(const char *userName)
+{
+    int count = 0;
+    char charNum[strlen(userName)];
+    for (int i = 0; i < strlen(userName); i++)
+    {
+        if (isdigit(userName[i]))
+        {
+            charNum[count] = userName[i];
+            count++;
+        }
+    }
+    count = 0;
+    return atoi(charNum);
+}

@@ -5,10 +5,9 @@
 #include <WiFiUdp.h>
 #include <Measurement.h>
 #include <Connection.h>
+#include <utils.h>
 
-
-int stationID = 3; // check stations table in database
-unsigned long readInterval = 2000;
+unsigned long readInterval = 1000;
 unsigned long uploadInterval = 10000;
 
 unsigned long currentMillis, lastReadMillis, lastUploadMillis;
@@ -17,15 +16,13 @@ DFRobot_SHT20 sht20;
 Measurement temperature, humidity;
 
 const int16_t messageSize = 256;
-Connection connection(messageSize);
-
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);
 
 void waitForNextMinute()
 {
-  while (!connection.statusOK())
+  while (!statusOK())
     ;
   timeClient.begin();
   while (!timeClient.update())
@@ -50,22 +47,22 @@ void setup()
 
 void updateJson()
 {
-  connection.jsonDoc["stationID"] = stationID;
-  connection.jsonDoc["count"] = temperature.count();
-  connection.jsonDoc["Tmin"] = temperature.min();
-  connection.jsonDoc["Tmax"] = temperature.max();
-  connection.jsonDoc["Tmean"] = temperature.mean();
-  connection.jsonDoc["Tstdev"] = temperature.stdev();
-  connection.jsonDoc["RHmin"] = humidity.min();
-  connection.jsonDoc["RHmax"] = humidity.max();
-  connection.jsonDoc["RHmean"] = humidity.mean();
-  connection.jsonDoc["RHstdev"] = humidity.stdev();
-  connection.jsonDoc["freeHeap"] = ESP.getFreeHeap();
+  jsonDoc["stationID"] = intFromUserName(mqtt_user);
+  jsonDoc["count"] = temperature.count();
+  jsonDoc["Tmin"] = temperature.min();
+  jsonDoc["Tmax"] = temperature.max();
+  jsonDoc["Tmean"] = temperature.mean();
+  jsonDoc["Tstdev"] = temperature.stdev();
+  jsonDoc["RHmin"] = humidity.min();
+  jsonDoc["RHmax"] = humidity.max();
+  jsonDoc["RHmean"] = humidity.mean();
+  jsonDoc["RHstdev"] = humidity.stdev();
+  jsonDoc["freeHeap"] = ESP.getFreeHeap();
 }
 
 void loop()
 {
-  if (connection.statusOK())
+  if (statusOK())
   {
     currentMillis = millis();
     if (currentMillis - lastReadMillis >= readInterval)
@@ -81,8 +78,8 @@ void loop()
       updateJson();
       temperature.reset();
       humidity.reset();
-      connection.upload();
+      upload();
     }
-    connection.check();
+    check();
   }
 }
