@@ -28,10 +28,12 @@ unsigned long waitCount;
 uint8_t status;
 String clientId;
 
+const int16_t messageSize = 256;
+
 WiFiClient espClient;
-MQTTClient mqttClient(256);
-StaticJsonDocument<256> jsonDoc;
-char payload[256];
+MQTTClient mqttClient(messageSize);
+StaticJsonDocument<messageSize> jsonDoc;
+char payload[messageSize];
 
 // void initConnection()
 // {

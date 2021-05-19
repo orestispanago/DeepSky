@@ -6,6 +6,7 @@
 #include <Measurement.h>
 #include <Connection.h>
 #include <utils.h>
+#include <Timing.h>
 
 unsigned long readInterval = 1000;
 unsigned long uploadInterval = 10000;
@@ -15,23 +16,7 @@ unsigned long currentMillis, lastReadMillis, lastUploadMillis;
 DFRobot_SHT20 sht20;
 Measurement temperature, humidity;
 
-const int16_t messageSize = 256;
-
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP);
-
-void waitForNextMinute()
-{
-  while (!statusOK())
-    ;
-  timeClient.begin();
-  while (!timeClient.update())
-  {
-    timeClient.forceUpdate();
-  }
-  while (timeClient.getSeconds() != 0)
-    ;
-}
+int stationId = intFromUserName(mqtt_user);
 
 void setup()
 {
@@ -41,13 +26,13 @@ void setup()
   sht20.initSHT20();
   delay(100);
   sht20.checkSHT20();
-  // waitForNextMinute();
+  waitForNextMinute();
   lastUploadMillis = millis();
 }
 
 void updateJson()
 {
-  jsonDoc["stationID"] = intFromUserName(mqtt_user);
+  jsonDoc["stationID"] = stationId;
   jsonDoc["count"] = temperature.count();
   jsonDoc["Tmin"] = temperature.min();
   jsonDoc["Tmax"] = temperature.max();
@@ -60,6 +45,20 @@ void updateJson()
   jsonDoc["freeHeap"] = ESP.getFreeHeap();
 }
 
+void sampleAll()
+{
+  temperature.sample(sht20.readTemperature());
+  humidity.sample(sht20.readHumidity());
+}
+
+void uploadAll()
+{
+  updateJson();
+  temperature.reset();
+  humidity.reset();
+  upload();
+}
+
 void loop()
 {
   if (statusOK())
@@ -68,17 +67,13 @@ void loop()
     if (currentMillis - lastReadMillis >= readInterval)
     {
       lastReadMillis = currentMillis;
-      temperature.sample(sht20.readTemperature());
-      humidity.sample(sht20.readHumidity());
+      sampleAll();
     }
     currentMillis = millis();
     if (currentMillis - lastUploadMillis >= uploadInterval)
     {
       lastUploadMillis = currentMillis;
-      updateJson();
-      temperature.reset();
-      humidity.reset();
-      upload();
+      uploadAll();
     }
     check();
   }
